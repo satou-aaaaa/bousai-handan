@@ -111,6 +111,7 @@ check("Math.random は練習・とことんの種だけ（今日の5問・上級
 check("乱数は sort の比較の中で引かない（ブラウザで引く回数が変わる）", !/\.sort\(\s*\([^)]*\)\s*=>[^\n;]*\b(R|rng|rand|Math\.random)\s*\(/.test(html + gen));
 check("一行の式の途中にコメント // を足さない（行の残りが消える。rosen-hitofude 2026-11-04）", !/;\s*\/\/[^\n]*;\s*\w/.test(gen.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n")));
 check("本当の災害では、市町村の情報とその地域のハザードマップに従うことを、遊び方と「このゲームについて」に書く", (html.match(/市町村/g) || []).length >= 2 && /架空/.test(html));
+{ const hk = JSON.parse(readFileSync(path.join(root, ".claude/settings.json"), "utf8")).hooks.SessionStart || []; check("クラウドの会話を始めたときも再開したときも準備を回す（SessionStart の matcher に startup と resume）", hk.some((h) => /(^|\|)startup(\||$)/.test(h.matcher) && /(^|\|)resume(\||$)/.test(h.matcher) && JSON.stringify(h.hooks).includes("scripts/setup.sh"))); }
 check("README に出典（公的機関）を並べる", Object.values(G.SRC).every(([, u]) => readFileSync(path.join(root, "README.md"), "utf8").includes(u)));
 check("画面にお笑いの言葉を入れない（本物っぽく）", !/お笑い|ギャグ|ツッコミ|なんでやねん|（うそ）/.test(html));
 check("引き継ぎ：transfer.js をゲームの script より前に、このゲームの記録のキーだけで読む", /<script src="transfer\.js" data-game="bousai-handan" data-keys="bousai-v1,bousai-fs"><\/script>\s*<\/head>/.test(html) && html.indexOf('src="transfer.js"') < html.indexOf('src="gen.js"') && /data-hk/.test(html) && existsSync(path.join(root, "transfer.js")));
