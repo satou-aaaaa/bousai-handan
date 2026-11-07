@@ -35,7 +35,7 @@ function expect(P) {
       // 家にとどまれる3つの条件（首相官邸「避難の考え方」）：家屋倒壊等氾濫想定区域の外・浸水より高い部屋（国交省：0.5m で1階床上・3m で2階床・5m で3階床のおそれ）・水が引くまでの備え
       const b = m.g[m.home[1]][m.home[0]], house = P.info[0], fl = /平屋/.test(house) ? 1 : /2階建て/.test(house) ? 2 : /3階/.test(house) ? 3 : 5;
       const limit = { 1: 1, 2: 2, 3: 3, 5: 4 }[fl], zone = (m.zone || []).some((z) => same(z, m.home));
-      const longFail = P.info.some((x) => x.includes("3日以上")) && P.info.some((x) => x.includes("1日分だけ"));
+      const longFail = P.info.some((x) => x.includes("3日ほど")) && P.info.some((x) => x.includes("1日分だけ"));
       return b <= limit && !zone && !longFail ? "STAY" : "GO";
     }
     case "shelter": case "sand": case "tsunami_map": {
@@ -67,6 +67,11 @@ function expect(P) {
     }
   }
   check(`問題：${G.KINDS.length}種類×${N}問で、選び肢4つ・出典つき・答えは別の決まりで解き直しても同じ（地図の避難先は答えが1つ）`, Object.keys(bad).length === 0, JSON.stringify(bad));
+  { // 2026-11-07 CodeRabbit：地震で扉を開けるのは身を守ったあと・浸水の期間は備え（1週間分）で足りる長さ・知らない種類は null
+    const door = []; for (let i = 0; i < 400; i++) { const P = G.make(`quake_home|door${i}`); if (P.ans.includes("扉を開け") && !/身を守れた|ゆれがおさまった/.test(P.scene)) door.push(P.scene); }
+    const longs = []; for (let i = 0; i < 400; i++) { const P = G.make(`stay2|len${i}`); for (const x of P.info || []) if (/以上/.test(x)) longs.push(x); }
+    check("問題：扉を開ける答えは身を守ったあとの場面だけ・水が引くまでの期間に「以上」（上限なし）を使わない・知らない種類（constructor など）は null", door.length === 0 && longs.length === 0 && G.make("constructor|x") === null && G.make("toString|x") === null, JSON.stringify([door[0], longs[0]]));
+  }
   const few = G.KINDS.filter((k) => seen[k.id].size < 4).map((k) => `${k.id}:${seen[k.id].size}`);
   check("問題：どの種類も4通り以上出る", few.length === 0, few.join(","));
   const total = G.KINDS.reduce((a, k) => a + seen[k.id].size, 0);
@@ -125,9 +130,10 @@ check("README の URL のすぐ後ろに全角の字を続けない（Link check
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 const server = createServer((req, res) => {
   const p = decodeURIComponent(new URL(req.url, "http://x").pathname), f = path.join(root, p === "/" ? "index.html" : p);
-  if (!f.startsWith(root) || !existsSync(f)) { res.writeHead(404); return res.end(); }
+  if (path.relative(root, f).startsWith("..") || path.isAbsolute(path.relative(root, f)) || !existsSync(f)) { res.writeHead(404); return res.end(); }
   res.writeHead(200, { "content-type": TYPES[path.extname(f)] || "application/octet-stream" }); res.end(readFileSync(f));
-}).listen(0);
+});
+await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const errors = [];
@@ -165,6 +171,29 @@ try {
   check("ホームに今日のひとこと（防災ノートの覚えること）が出る", (await p.textContent("#tip")).includes("今日のひとこと"));
   check("上級・とことん・練習は、はじめての日から押せる（鍵なし）", await p.locator("#go-h:not([disabled])").count() === 1 && await p.locator("#go-e:not([disabled])").count() === 1 && await p.locator("#go-p").count() === 1 && !/🔒|すると開く|🎫/.test(await p.textContent("#app")));
 
+  {
+    const q = await newPage();
+    check("遊び方：Esc で閉じても出る", await q.locator("#howto[open]").count() === 1);
+    await q.keyboard.press("Escape"); await q.waitForTimeout(100);
+    const shut = await q.locator("#howto[open]").count() === 0;
+    await q.evaluate(() => __bs.home()); await q.waitForTimeout(100);
+    const home = await q.locator("#howto[open]").count() === 0;
+    await q.reload(); await q.waitForTimeout(150);
+    check("遊び方：Esc で閉じたあと、ホームに戻っても開き直しても出ない（2026-11-07 shared-workflows #186）", shut && home && await q.locator("#howto[open]").count() === 0);
+    await q.close();
+  }
+
+  {
+    // 引き継ぎなどで入った、答えの数が足りない日の記録は捨てる（2026-11-07 CodeRabbit：{m:[]} で「全部まちがいなし」になった）
+    const q = await newPage();
+    await q.evaluate((d) => { localStorage.setItem("bousai-v1", JSON.stringify({ v: 1, tut: true, days: { [d]: { m: [] } }, hdays: { [d]: { m: [0, 0, 0, 0, 0] } }, adays: {}, dex: {}, runs: {}, kofi: {}, ach: {}, ebest: 0 })); }, await q.evaluate(() => __bs.todayKey()));
+    await q.reload(); await q.waitForTimeout(150);
+    const s = await q.evaluate(() => __bs.load());
+    check("記録の読み込み：今日の5問は5つ・上級は3つの答えがある日だけ残す", !Object.keys(s.days).length && !Object.keys(s.hdays).length);
+    await q.close();
+  }
+  check("「動きを減らす」のときは、次へのボタンへすべらずに移る", /scrollIntoView\(\{ behavior: window\.A11y && A11y\.on\("calm"\) \? "instant"/.test(html));
+
   // 今日の5問：1問目はまちがえる、2問目はヒント2回、ほかはそのまま
   await p.click("#go-d");
   const tags = await p.evaluate(() => __bs.load().runs.d.list);
@@ -177,7 +206,11 @@ try {
     const lab = await p.getAttribute(".map", "aria-label");
     check("地図には読み上げ用の説明（家と各場所の位置・深さ）がある", /家は/.test(lab) && /Aは/.test(lab) && /Cは/.test(lab) && await p.getAttribute(".map", "role") === "img");
     check("地図の深さは色に加えて数字でも分かる（凡例と同じ番号）・避難場所の災害の種類は文字の印", await p.locator(".mleg em").count() >= 5 && (await p.$$eval(".map svg text", (t) => t.filter((x) => /^[0-4]$/.test(x.textContent)).length)) === G.W * G.H && await p.locator(".plist .mk2").count() >= 3);
+    const said = await p.evaluate(() => [...document.querySelectorAll("[data-a11y-say]")].map((el) => el.getAttribute("aria-label") || el.innerText).join("。"));
+    const opt0 = await p.textContent(".ch");
+    check("「🔊 読む」の対象に、場面・地図の説明・場所の印・問い・選び肢が入る（2026-11-07 CodeRabbit）", said.includes(lab) && /Aは/.test(said) && said.includes(opt0.trim()) && await p.locator(".plist[data-a11y-say]").count() === 1);
     await p.evaluate(() => { __bs.save((s) => { s.runs.p = null; }); __bs.home(); });
+    check("ホーム（遊ぶ前）には Ko-fi のリンクを出さない", await p.locator('a[href*="ko-fi.com"]').count() === 0);
     await p.click("#go-d");
   }
   await p.click(`.ch[data-j="${await wrongIdx(p)}"]`);
@@ -227,7 +260,7 @@ try {
   // とことん：まちがえても終わらない・「ここで降りる」で終わる・自己ベストは一度で正解した数
   await p.click("#back"); await p.click("#go-e");
   const el = await p.evaluate(() => __bs.load().runs.e.list);
-  check("とことんは100問から始まり、1回の中で同じ問題（場面・地図・答え）を出さない", el.length === 100 && await p.evaluate((l) => __bs.keysOf(l).size, el) >= 98, el.length);
+  check("とことんは100問から始まり、1回の中で同じ問題（場面・地図・答え）を出さない", el.length === 100 && await p.evaluate((l) => __bs.keysOf(l).size, el) === 100, el.length);
   await solve(p); await p.click("#next"); await solve(p); await p.click("#next");
   await solve(p, { wrong: 3 }); await p.click("#next");
   await p.click("#hint"); await p.click("#hint"); await solve(p); await p.click("#next");
@@ -243,10 +276,10 @@ try {
     await q.evaluate(() => { __bs.save((s) => { const l = __bs.endlessList("qa"); s.runs.e = { mode: "e", date: __bs.todayKey(), list: l, res: l.slice(0, 95).map(() => ({ m: 0 })), cur: null, id: "qaend", a0: [] }; }); __bs.play("e"); });
     await q.waitForTimeout(200);
     const r = await q.evaluate(() => { const r = __bs.load().runs.e; return [r.list.length, __bs.keysOf(r.list).size]; });
-    check("とことんは残りが少なくなると問題を足して続く（足した分も重ならない）", r[0] === 140 && r[1] >= 136, r.join(","));
+    check("とことんは残りが少なくなると問題を足して続く（足した分も重ならない）", r[0] === 140 && r[1] === 140, r.join(","));
     let dup = 0;
     for (let i = 0; i < 300; i++) { const n = await q.evaluate(() => { const l = __bs.endlessList(); return l.length - __bs.keysOf(l).size; }); dup += n; }
-    check("とことんの並びを300回作っても、1回の中で同じ問題はほとんど無い", dup <= 30, dup);
+    check("とことんの並びを300回作っても、1回の中で同じ問題は1つも無い", dup === 0, dup);
     await q.context().close();
   }
   {

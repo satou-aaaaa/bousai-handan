@@ -450,8 +450,8 @@ function tidy(s) {
   // 日付と日ごとの記録の形も確かめ、壊れたものは捨てる（細工した引き継ぎコードで画面が止まらないように。2026-11-05 CodeRabbit）
   const okDate = (v) => { if (typeof v !== "string" || !/^\d{4}-\d\d-\d\d$/.test(v)) return false; const t = Date.parse(v + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v; }; // 2026-02-30 のような無い日も捨てる
   const okTag = (t) => typeof t === "string" && Object.prototype.hasOwnProperty.call(G.BY, t.split("|")[0]);
-  const okRec = (x) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.every((v) => Number.isInteger(v) && v >= 0);
-  for (const b of [s.days, s.hdays, s.adays]) for (const d in b) if (!okDate(d) || !okRec(b[d])) delete b[d];
+  const okRec = (x, n) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.length === n && x.m.every((v) => Number.isInteger(v) && v >= 0);
+  for (const [b, n] of [[s.days, 5], [s.hdays, 3], [s.adays, 5]]) for (const d in b) if (!okDate(d) || !okRec(b[d], n)) delete b[d];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
     if (typeof r !== "object" || !okDate(r.date) || !Array.isArray(r.list) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
@@ -537,15 +537,15 @@ function mapSay(m) {
 function mapHtml(m) {
   const leg = m.type === "sea" ? `<span>ますの数字は標高（海からの高さ）</span>`
     : G.BAND.map((b, i) => `<span><em style="background:${BCOL[i]}">${i}</em>${b}</span>`).join("") + ((m.zone || []).length ? `<span><em style="background:repeating-linear-gradient(45deg,#b3261e88 0 3px,#fff 3px 7px)"></em>家屋倒壊等氾濫想定区域</span>` : "") + ((m.slope || []).length ? `<span><em style="background:repeating-linear-gradient(-45deg,#7a4a1288 0 3px,#fff 3px 7px)"></em>土砂災害警戒区域</span>` : "");
-  const pl = (m.places || []).length ? `<ul class="plist">${m.places.map((p) => `<li><b aria-hidden="true">${p.k}</b>${esc(p.name)}　${p.marks.map((x) => `<span class="mk2">${x}</span>`).join("")}</li>`).join("")}</ul><p class="src" style="min-height:0">四角の印は、その場所が避難場所に決まっている災害の種類です。</p>` : "";
-  return `<div class="map" role="img" aria-label="${esc(mapSay(m))}">${mapSvg(m)}</div><div class="mleg">${leg}</div>${pl}`;
+  const pl = (m.places || []).length ? `<ul class="plist" data-a11y-say>${m.places.map((p) => `<li><b aria-hidden="true">${p.k}</b>${esc(p.name)}　${p.marks.map((x) => `<span class="mk2">${x}</span>`).join("")}</li>`).join("")}</ul><p class="src" style="min-height:0">四角の印は、その場所が避難場所に決まっている災害の種類です。</p>` : "";
+  return `<div class="map" role="img" data-a11y-say aria-label="${esc(mapSay(m))}">${mapSvg(m)}</div><div class="mleg">${leg}</div>${pl}`;
 }
 const CATI = { 地震: "🏠", 津波: "🌊", 大雨: "🌧️", 備え: "🎒", 地図: "🗺️" };
 function sceneHtml(P) {
   return `<span class="cat c-${P.cat}"><span aria-hidden="true">${CATI[P.cat] || ""}</span>${P.cat === "地図" ? "ハザードマップ" : P.cat}</span>
     <p class="scene" data-a11y-say>${esc(P.scene)}</p>
-    ${P.info ? `<ul class="info">${P.info.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    ${P.swatch ? `<div class="swatch"><i style="background:${P.swatch[0]}" aria-hidden="true"></i>キキクルの色：${esc(P.swatch[1])}</div>` : ""}
+    ${P.info ? `<ul class="info" data-a11y-say>${P.info.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+    ${P.swatch ? `<div class="swatch" data-a11y-say><i style="background:${P.swatch[0]}" aria-hidden="true"></i>キキクルの色：${esc(P.swatch[1])}</div>` : ""}
     ${P.map ? mapHtml(P.map) : ""}
     <p class="q2" data-a11y-say>${esc(P.ask)}</p>`;
 }
@@ -557,10 +557,12 @@ const buzz = (n = 12) => { try { if (!(window.A11y && A11y.on("calm"))) navigato
 const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const toTop = () => window.scrollTo(0, 0);
 // 引き継ぎの画面（transfer.js）は data-hk のリンクから出す
-const footer = () => `<footer><a href="#" id="f-how">遊び方</a><a href="#" id="f-about">このゲームについて</a><a href="#" data-a11y-open>見やすさ</a><a href="#" data-hk>引き継ぎ</a><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a><a href="https://ko-fi.com/satouaaaaa" target="_blank" rel="noopener">Ko-fi で応援</a></footer>`;
+const footer = () => `<footer><a href="#" id="f-how">遊び方</a><a href="#" id="f-about">このゲームについて</a><a href="#" data-a11y-open>見やすさ</a><a href="#" data-hk>引き継ぎ</a><a href="${FEEDBACK}" target="_blank" rel="noopener">感想を送る</a></footer>`;
 function bindFooter() { const h = $("f-how"); if (h) h.onclick = (e) => { e.preventDefault(); openHow(); }; const a = $("f-about"); if (a) a.onclick = (e) => { e.preventDefault(); about(); }; }
 function openHow() { $("fb2").href = FEEDBACK; const d = $("howto"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
-$("howto-ok").onclick = () => { const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); save((s) => { s.tut = true; }); };
+$("howto-ok").onclick = () => { const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); seenHow(); };
+function seenHow() { if (!load().tut) save((s) => { s.tut = true; }); }
+$("howto").addEventListener("close", seenHow);
 
 function home() {
   const s = load(), k = todayKey(), done = s.days[k], hdone = s.hdays[k];
@@ -651,7 +653,7 @@ function play() {
         : `<div class="dots" aria-label="${i + 1}問目／${run.list.length}問">${run.list.map((_, j) => `<i class="${j < i ? "done" : j === i ? "on" : ""}"></i>`).join("")}</div><span style="font-size:.8rem;color:var(--ink2)">${label} ${i + 1}/${run.list.length}</span>`}
     </header>
     <div class="pad" id="qpad">${sceneHtml(P)}</div>
-    <div class="choices" id="choices">${P.opts.map((t, j) => `<button class="ch" data-j="${j}">${esc(t)}</button>`).join("")}</div>
+    <div class="choices" id="choices" data-a11y-say>${P.opts.map((t, j) => `<button class="ch" data-j="${j}">${esc(t)}</button>`).join("")}</div>
     <p class="msg" id="msg" role="status" aria-live="polite"></p>
     <div id="hintbox"></div>
     ${hard ? "" : `<button class="sub" id="hint">ヒント</button>`}
@@ -700,7 +702,7 @@ function choose(j) {
     <p class="why"><b>なぜ：</b>${esc(P.why)}</p>${srcHtml(P)}
     <button class="main ok" id="next">${fin ? "結果を見る" : "次の問題へ"}</button></div>`;
   $("next").onclick = play;
-  setTimeout(() => { if ($("next") && cur && cur.done && cur.tag === P.tag) $("next").scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 60);
+  setTimeout(() => { if ($("next") && cur && cur.done && cur.tag === P.tag) $("next").scrollIntoView({ behavior: window.A11y && A11y.on("calm") ? "instant" : "smooth", block: "nearest" }); }, 60);
 }
 
 function finish() {
