@@ -562,6 +562,7 @@ function bindFooter() { const h = $("f-how"); if (h) h.onclick = (e) => { e.prev
 function openHow() { $("fb2").href = FEEDBACK; const d = $("howto"); if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
 $("howto-ok").onclick = () => { save((s) => { s.tut = true; }); const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); };
 $("howto").addEventListener("close", () => { if (!load().tut) save((s) => { s.tut = true; }); });
+$("howto").addEventListener("cancel", () => { if (!load().tut) save((s) => { s.tut = true; }); });
 
 function home() {
   const s = load(), k = todayKey(), done = s.days[k], hdone = s.hdays[k];
