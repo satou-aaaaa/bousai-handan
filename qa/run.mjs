@@ -274,6 +274,15 @@ try {
   check("とことんは、まちがえてもヒントを使っても続く（🌸・チケットなし）", await p.locator(".ch").count() === 4 && await p.evaluate(() => __bs.cur().i) === 4 && !/🌸|🎫/.test(await p.textContent("#app")));
   await p.click("#quit"); await p.waitForTimeout(150);
   check("「ここで降りる」で結果：解いた数と、一度で正解した数", (await p.textContent("#eres")).includes("4問") && (await p.textContent("#eclean")).includes("一度で正解 2問"));
+  {
+    // 正解した直後に「ここで降りる」を押しても降りられ、いま解いた問題も数える（shared-workflows incidents/2026-11-17-known-game-bugs-spread.md）
+    const q0 = await newPage(); await closeHow(q0);
+    await q0.click("#go-e"); await solve(q0);
+    const qt = await q0.textContent("#quit");
+    await q0.click("#quit"); await q0.waitForTimeout(150);
+    check("とことん：正解した直後に降りると、ボタンは「1問で終える」で、結果に1問が入る", qt.includes("1問で終える") && (await q0.locator("#eres").count()) === 1 && (await q0.textContent("#eres")).includes("1問"), qt);
+    await q0.context().close();
+  }
   await p.reload(); await p.waitForTimeout(250);
   check("降りたあとに開き直しても、続きからにならない", await p.locator(".ch").count() === 0);
   check("とことんの自己ベスト（一度で正解の数）が残る", (await mem(p)).ebest === 2);
