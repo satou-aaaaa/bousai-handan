@@ -412,6 +412,29 @@ try {
       check("実績「たしかの目」（自信ありで10回当てる）・「覚えなおし」（復習で5問覚えた）が取れる", t.includes("sure10") && t.includes("learn5"), t.join(",")); }
     await q.context().close();
   }
+  // 保存した自信の記録の形と、開き直しても残ること・日の来た復習が0のとき（2026-11-17 CodeRabbit）
+  {
+    const q = await newPage(); await closeHow(q);
+    await q.evaluate(() => { __bs.save((s) => { s.runs.p = { mode: "p", date: __bs.todayKey(), list: ["level|jv1", "stay|jv2"], res: [], cur: { i: 0, tag: "level|jv1", wrong: [], hints: 0, jd: { sure: "yes" } }, id: "jv", ds: { n: "<b>", ok: 99 } }; }); });
+    await q.reload(); await q.waitForTimeout(150);
+    const r0 = await q.evaluate(() => __bs.load().runs.p);
+    check("保存した形のちがう自信（jd）は null、自信ありの数（ds）は数に直し当たり≦数", r0.cur.jd === null && Number.isInteger(r0.ds.n) && Number.isInteger(r0.ds.ok) && r0.ds.ok <= r0.ds.n, JSON.stringify([r0.cur.jd, r0.ds]));
+    await q.evaluate(() => { __bs.save((s) => { s.runs.p = { mode: "p", date: __bs.todayKey(), list: ["level|js1", "stay|js2"], res: [], cur: null, id: "js" }; }); Depth.runStart(); __bs.play("p"); });
+    await q.click("#dp-sure"); await q.click(`.ch[data-j="${await wrongIdx(q)}"]`); await q.waitForTimeout(80);
+    await q.reload(); await q.waitForTimeout(150); await q.evaluate(() => __bs.play("p"));
+    const r1 = await q.evaluate(() => __bs.load().runs.p);
+    check("自信ありでまちがえたあと開き直しても、その回の自信ありの数（1回・当たり0）と自信の記録が残る", r1.ds && r1.ds.n === 1 && r1.ds.ok === 0 && r1.cur && r1.cur.jd && r1.cur.jd.sure === true && r1.cur.jd.ok === false, JSON.stringify([r1.ds, r1.cur && r1.cur.jd]));
+    await q.click(`.ch[data-j="${await ansIdx(q)}"]`); await q.waitForSelector(".verdict");
+    check("開き直したあと正解しても、正解の画面に「自信ありでまちがえた」と出る", (await q.textContent(".verdict")).includes("自信ありでまちがえた"));
+    // ホームに「復習」が出ているあいだに、別のタブで復習が0になったら、押してもホームにもどる
+    await q.evaluate(() => { __bs.save((s) => { s.runs.p = null; s.runs.r = null; }); localStorage.setItem("bousai-depth", JSON.stringify({ v: 1, rv: { "level|jr1": { s: 0, due: "2026-01-01", t: 1 } } })); });
+    await q.goto(url); await q.waitForTimeout(150);
+    const hadR = await q.locator("#go-r").count() === 1;
+    await q.evaluate(() => localStorage.setItem("bousai-depth", JSON.stringify({ v: 1, rv: {} })));
+    if (hadR) await q.click("#go-r"); await q.waitForTimeout(150);
+    check("日の来た復習が0のとき復習を始めると、ホームにもどる（復習の回は作らない）", hadR && await q.locator("#go-d").count() === 1 && await q.locator(".ch").count() === 0 && !(await q.evaluate(() => __bs.load().runs.r)));
+    await q.context().close();
+  }
 
   // 古いタブ：同じ問題を2つのタブで開き、片方で答えたら、もう片方は二重に入れない
   {
