@@ -385,6 +385,20 @@ try {
     check("押せる所は高さ44px以上", small.length === 0, [...new Set(small)].slice(0, 8).join(","));
   }
 
+  // 保存できないブラウザでは帯で知らせ、保存できるようになったら消す
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+    await ctx.addInitScript(() => { window.__origSetItem = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; });
+    const q = await newPage(390, ctx); await closeHow(q);
+    await q.click("#go-e"); await solve(q);
+    const n1 = await q.locator("#savewarn").count(); await q.waitForTimeout(2000);
+    const n2 = await q.locator("#savewarn").count();
+    check("保存に失敗すると、帯（#savewarn）がちょうど1つ出て、2秒たっても残る", n1 === 1 && n2 === 1, `${n1},${n2}`);
+    await q.evaluate(() => { Storage.prototype.setItem = window.__origSetItem; });
+    await q.click("#next"); await solve(q);
+    check("保存できるようになったら、帯（#savewarn）が消える", await q.locator("#savewarn").count() === 0);
+    await ctx.close();
+  }
   // 見やすさの設定を全部入れても、ページの一番下まで動ける（読み上げの class が html に当たって固まった。2026-11-05）
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 700 } });
